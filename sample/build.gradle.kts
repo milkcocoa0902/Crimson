@@ -6,10 +6,6 @@ plugins {
 group = "com.milkcocoa.info.crimson"
 version = "unspecified"
 
-repositories {
-    mavenCentral()
-}
-
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
@@ -17,6 +13,9 @@ dependencies {
     implementation(project(":crimson"))
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    implementation("io.ktor:ktor-client-cio:3.1.2")
+    implementation("io.ktor:ktor-client-websockets:3.1.2")
+    implementation("io.ktor:ktor-client-okhttp:3.1.2")
 }
 
 tasks.test {

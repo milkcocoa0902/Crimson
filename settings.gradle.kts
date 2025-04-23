@@ -2,6 +2,11 @@ pluginManagement {
     plugins {
         kotlin("jvm") version "2.1.10"
     }
+    repositories {
+        google()
+        gradlePluginPortal()
+        mavenCentral()
+    }
 }
 // The settings file is the entry point of every Gradle build.
 // Its primary purpose is to define the subprojects.
@@ -12,6 +17,8 @@ dependencyResolutionManagement {
     // Use Maven Central as the default repository (where Gradle will download dependencies) in all subprojects.
     @Suppress("UnstableApiUsage")
     repositories {
+        google()
+        gradlePluginPortal()
         mavenCentral()
     }
 }

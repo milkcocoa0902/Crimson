@@ -1,18 +1,19 @@
 package com.milkcocoa.info.crimson
 
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
-import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.http.headersOf
+import io.ktor.utils.io.core.toByteArray
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readBytes
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -56,12 +57,20 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
     private val ktorHttpClient: HttpClient = config.ktorHttpClient
     private val crimsonHandler: CrimsonHandler<SND, RCV>? = config.crimsonHandler
     private val retryPolicy: RetryPolicy = config.retryPolicy
-    private val scope: CoroutineScope = config.scope
+    private val dispatcher: CoroutineDispatcher = config.dispatcher
     private val json: Json = config.json
     private val webSocketEndpointProvider: WebSocketEndpointProvider = config.webSocketEndpointProvider
     private val healthCheckInterval = config.healthCheckInterval
     private val incomingSerializer = config.incomingSerializer ?: error("")
     private val outgoingSerializer = config.outgoingSerializer ?: error("")
+
+
+    private var coroutineScope = CoroutineScope(dispatcher + SupervisorJob())
+
+    private fun resetScope(){
+        coroutineScope.cancel()
+        coroutineScope = CoroutineScope(dispatcher + SupervisorJob())
+    }
 
 
     override suspend fun execute(command: CrimsonCommand) {
@@ -74,12 +83,16 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
             }
             is CrimsonCommand.Connect -> {
                 mutex.withLock {
-                    val connectionInfo = webSocketEndpointProvider.build()
+                    runCatching {
+                        val connectionInfo = webSocketEndpointProvider.build()
+                        _connectionStatus.value = ConnectionState.CONNECTING
 
-                    _connectionStatus.value = ConnectionState.CONNECTING
-                    ktorHttpClient.webSocketSession(urlString = connectionInfo.urlString) {
-                        connectionInfo.headers.forEach { key, value -> headersOf(key, value) }
-                    }.also {
+                        ktorHttpClient.webSocketSession(urlString = connectionInfo.urlString) {
+                            connectionInfo.headers.forEach { (key, value) ->
+                                headers.append(key, value)
+                            }
+                        }
+                    }.onSuccess {
                         _connectionStatus.value = ConnectionState.CONNECTED
                         this@Crimson.session = it
 
@@ -91,16 +104,23 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
                             crimson = this@Crimson,
                             flow = _incomingFlow
                         )
+                    }.onFailure {
+                        _connectionStatus.value = ConnectionState.CLOSED
+                        crimsonHandler?.onError(it)
                     }
                 }
             }
             is CrimsonCommand.Disconnect -> {
                 mutex.withLock {
+                    _connectionStatus.value = ConnectionState.CLOSED
                     session?.close(reason = CloseReason(code = command.code.toShort(), message = command.reason))
                     session = null
-                    scope.cancel()
-                    retryingJob?.cancel()
-                    _connectionStatus.value = ConnectionState.CLOSED
+                    if(command.abnormally){
+                        resetScope()
+                        coroutineScope.launch {
+                            launchReconnectionLoop()
+                        }
+                    }
                 }
             }
         }
@@ -119,29 +139,31 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
 
     private var retryingJob: Job? = null
 
-    private fun simpleDelay(delay: Duration) {
-        retryingJob?.cancel()
-        retryingJob = scope.launch {
-            _connectionStatus.value = ConnectionState.RETRYING
-            while (isActive && _connectionStatus.value != ConnectionState.CONNECTED) {
-                delay(delay)
-                runCatching { execute(CrimsonCommand.Connect) }
+    private suspend fun simpleDelay(delay: Duration) {
+        mutex.withLock {
+            retryingJob?.cancel()
+            retryingJob = coroutineScope.launch {
+                _connectionStatus.value = ConnectionState.RETRYING
+                while (isActive && _connectionStatus.value != ConnectionState.CONNECTED) {
+                    delay(delay)
+                    runCatching { execute(CrimsonCommand.Connect) }
+                }
             }
-            _connectionStatus.value = ConnectionState.CONNECTED
         }
     }
 
-    private fun exponentialDelay(delay: Duration) {
-        retryingJob?.cancel()
-        retryingJob = scope.launch {
-            _connectionStatus.value = ConnectionState.RETRYING
-            var d = delay
-            while (isActive && _connectionStatus.value != ConnectionState.CONNECTED) {
-                delay(d)
-                d = (d.inWholeMilliseconds * 1.33).milliseconds
-                runCatching { execute(CrimsonCommand.Connect) }
+    private suspend fun exponentialDelay(delay: Duration) {
+        mutex.withLock {
+            retryingJob?.cancel()
+            retryingJob = coroutineScope.launch {
+                _connectionStatus.value = ConnectionState.RETRYING
+                var d = delay
+                while (isActive && _connectionStatus.value != ConnectionState.CONNECTED) {
+                    delay(d)
+                    d = (d.inWholeMilliseconds * 1.33).milliseconds
+                    runCatching { execute(CrimsonCommand.Connect) }
+                }
             }
-            _connectionStatus.value = ConnectionState.CONNECTED
         }
     }
 
@@ -154,14 +176,14 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
             .filterIsInstance<Frame.Pong>()
             .filter { frame -> frame.data.contentEquals(healthCheckFrame) }
             .onEach { frame -> lastHealthCheckTime = Clock.System.now() }
-            .launchIn(scope)
+            .launchIn(coroutineScope)
 
-        scope.launch {
+        coroutineScope.launch {
             while (isActive) {
                 execute(CrimsonCommand.Ping(healthCheckFrame))
                 delay(healthCheckInterval)
                 if(Clock.System.now() > lastHealthCheckTime + (healthCheckInterval * 2)){
-                    execute(CrimsonCommand.Disconnect(code = 4000, "health check failed"))
+                    execute(CrimsonCommand.Disconnect(code = 4000, "health check failed", abnormally = true))
                 }
             }
         }
@@ -169,12 +191,12 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
 
 
     private fun closeMonitor(session: DefaultClientWebSocketSession){
-        scope.launch {
+        coroutineScope.launch {
             val closeReason = session.closeReason.await()
             closeReason?.let {
+                // 終了コードでabnormallyを判別する
                 this@Crimson.crimsonHandler?.onClosed(closeReason.code.toInt(), closeReason.message)
             }
-            this@Crimson._connectionStatus.value = ConnectionState.CLOSED
         }
     }
 
@@ -183,7 +205,7 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
             .filterIsInstance<Frame.Ping>()
             .mapNotNull { frame ->
                 execute(CrimsonCommand.Pong(frame.readBytes()))
-            }.launchIn(scope)
+            }.launchIn(coroutineScope)
     }
 
     private fun handleIncomingFrame(session: DefaultClientWebSocketSession){
@@ -192,26 +214,26 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
                 (it is Frame.Text) || (it is Frame.Binary)
             }
             .mapNotNull { frame ->
-                runCatching {
-                    return@runCatching when(frame) {
-                        is Frame.Text -> json.decodeFromString(incomingSerializer, frame.readText())
-                        is Frame.Binary -> json.decodeFromString(incomingSerializer, frame.readBytes().decodeToString())
-                        else -> null
-                    }
-                }.getOrNull()
+                when(frame) {
+                    is Frame.Text -> runCatching{ json.decodeFromString(incomingSerializer, frame.readText()) }.getOrNull()
+                    is Frame.Binary -> runCatching { json.decodeFromString(incomingSerializer, frame.readBytes().decodeToString()) }.getOrNull()
+                    else -> null
+                }
             }
             .catch { e ->
-                _connectionStatus.value = ConnectionState.CLOSED
-                this@Crimson.session = null
-                when(retryPolicy){
-                    is RetryPolicy.Never -> {}
-                    is RetryPolicy.SimpleDelay -> simpleDelay(retryPolicy.delay)
-                    is RetryPolicy.ExponentialDelay -> exponentialDelay(retryPolicy.initial)
-                }
                 crimsonHandler?.onError(e)
+                execute(CrimsonCommand.Disconnect(code = 4001, "incoming frame error", abnormally = true))
             }.onEach {
                 _incomingFlow.emit(it)
-            }.launchIn(scope)
+            }.launchIn(coroutineScope)
+    }
+
+    private suspend  fun launchReconnectionLoop(){
+        when(retryPolicy){
+            is RetryPolicy.Never -> {}
+            is RetryPolicy.SimpleDelay -> simpleDelay(retryPolicy.delay)
+            is RetryPolicy.ExponentialDelay -> exponentialDelay(retryPolicy.initial)
+        }
     }
 
 
