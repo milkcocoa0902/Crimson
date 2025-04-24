@@ -10,7 +10,7 @@ sealed class RetryPolicy{
             if(delay < 15.seconds){ error("The delay of $delay seconds is less than 15 seconds!") }
         }
     }
-    data class ExponentialDelay(val initial: Duration): RetryPolicy(){
+    data class ExponentialDelay(val initial: Duration, val max: Duration = Duration.INFINITE): RetryPolicy(){
         init {
             if(initial < 15.seconds){ error("The delay of $initial seconds is less than 15 seconds!") }
         }

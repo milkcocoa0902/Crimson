@@ -30,17 +30,9 @@ data class SamplePayload(val a: String): CrimsonData
 
 fun main(){
     val crimson = Crimson<SamplePayload, SamplePayload>{
-        ktorHttpClient = HttpClient(io.ktor.client.engine.okhttp.OkHttp){
-            install(WebSockets)
-            engine {
-                preconfigured = OkHttpClient.Builder()
-                    .pingInterval(20, TimeUnit.SECONDS)
-                    .build()
-            }
-        }
         crimsonHandler = object: CrimsonHandler<SamplePayload, SamplePayload> {
             override suspend fun onConnect(crimson: CrimsonCore<SamplePayload, SamplePayload>, flow: SharedFlow<SamplePayload>) {
-//                crimson.execute(CrimsonCommand.StartHealthCheck)
+                crimson.execute(CrimsonCommand.StartHealthCheck)
                 CoroutineScope(Dispatchers.Default).launch {
                     flow.collect { payload -> println(payload.a) }
                 }
@@ -79,9 +71,9 @@ fun main(){
         crimson.incoming.collect { incoming -> println(incoming) }
     }
 
-//    CoroutineScope(Dispatchers.Default).launch {
-//        crimson.send(SamplePayload("hello"))
-//    }
+    CoroutineScope(Dispatchers.Default).launch {
+        crimson.send(SamplePayload("hello"))
+    }
 
 
     Thread.sleep(60.minutes.inWholeMilliseconds)

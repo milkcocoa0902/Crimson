@@ -152,7 +152,7 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
         }
     }
 
-    private suspend fun exponentialDelay(delay: Duration) {
+    private suspend fun exponentialDelay(delay: Duration, max: Duration) {
         mutex.withLock {
             retryingJob?.cancel()
             retryingJob = coroutineScope.launch {
@@ -160,7 +160,7 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
                 var d = delay
                 while (isActive && _connectionStatus.value != ConnectionState.CONNECTED) {
                     delay(d)
-                    d = (d.inWholeMilliseconds * 1.33).milliseconds
+                    d = (d.inWholeMilliseconds * 1.33).milliseconds.coerceAtMost(max)
                     runCatching { execute(CrimsonCommand.Connect) }
                 }
             }
@@ -232,7 +232,7 @@ class Crimson<SND: CrimsonData, RCV: CrimsonData>(
         when(retryPolicy){
             is RetryPolicy.Never -> {}
             is RetryPolicy.SimpleDelay -> simpleDelay(retryPolicy.delay)
-            is RetryPolicy.ExponentialDelay -> exponentialDelay(retryPolicy.initial)
+            is RetryPolicy.ExponentialDelay -> exponentialDelay(retryPolicy.initial, retryPolicy.max)
         }
     }
 
