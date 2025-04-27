@@ -52,7 +52,7 @@ fun Application.test(){
 
             launch {
                 incomingMessageFlow.collect {
-                    sessionRegistry.all().broadcast(it)
+                    sessionRegistry.all.broadcast(it)
                 }
             }
         }

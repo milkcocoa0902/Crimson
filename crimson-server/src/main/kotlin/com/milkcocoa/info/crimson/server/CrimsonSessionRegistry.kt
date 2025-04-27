@@ -21,13 +21,34 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
+
+/**
+ * Registry for crimson server sessions.
+ * @param UPSTREAM upstream data type (received from clients)
+ * @param DOWNSTREAM downstream data type (send to clients)
+ */
 @OptIn(ExperimentalTime::class)
 class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
+    /**
+     * max connection count.
+     */
     private val maxConnection: Int = 10000,
+    /**
+     * max lifetime of session.
+     */
     private val maxLifetime: Duration = 3600.seconds,
+    /**
+     * watch dog interval.
+     */
     private val watchDogInterval: Duration = 120.seconds,
+    /**
+     * watch dog dispatcher.
+     */
     private val watchDogDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ){
+    /**
+     * Connection limit exception.
+     */
     object ConnectionLimit: Throwable("")
 
     val semaphore = Semaphore(100)
@@ -36,6 +57,13 @@ class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
     private val _crimsonServerSessionFlow = MutableSharedFlow<List<CrimsonServerSession<UPSTREAM, DOWNSTREAM>>>()
     val crimsonServerSessionFlow: SharedFlow<List<CrimsonServerSession<UPSTREAM, DOWNSTREAM>>> get() = _crimsonServerSessionFlow
 
+    /**
+     * store crimson server session.
+     * @param sessionId session id
+     * @param crimsonServerSession crimson server session
+     * @throws ConnectionLimit if the connection limit is exceeded.
+     * @see ConnectionLimit
+     */
     @OptIn(ExperimentalTime::class)
     suspend fun add(sessionId: UUID, crimsonServerSession: CrimsonServerSession<UPSTREAM, DOWNSTREAM>){
         mutex.withLock {
@@ -46,6 +74,10 @@ class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
         }
     }
 
+    /**
+     * remove crimson server session.
+     * @param sessionId session id
+     */
     suspend fun remove(sessionId: UUID){
         mutex.withLock {
             runCatching {
@@ -55,14 +87,29 @@ class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
         }
     }
 
+    /**
+     * get crimson server session.
+     * @param sessionId session id
+     * @return crimson server session. if not found, returns null.
+     * @see CrimsonServerSession
+     */
     suspend fun get(sessionId: UUID): CrimsonServerSession<UPSTREAM, DOWNSTREAM>?{
         return _crimsonServerSessionMap[sessionId]
     }
 
-    suspend fun all(): List<CrimsonServerSession<UPSTREAM, DOWNSTREAM>>{
+    /**
+     * get all crimson server sessions.
+     * @return all crimson server sessions.
+     * @see CrimsonServerSession
+     */
+    val all get(): List<CrimsonServerSession<UPSTREAM, DOWNSTREAM>>{
         return _crimsonServerSessionMap.values.toList()
     }
 
+    /**
+     * enforce timeout of sessions.
+     *
+     */
     @OptIn(ExperimentalTime::class)
     suspend fun enforceTimeout() {
         mutex.withLock {
@@ -83,6 +130,9 @@ class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
         }
     }
 
+    /**
+     * watch dog for timeout of sessions.
+     */
     init {
         CoroutineScope(watchDogDispatcher).launch {
             while (true) {

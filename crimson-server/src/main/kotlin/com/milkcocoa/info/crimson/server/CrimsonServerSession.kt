@@ -92,10 +92,9 @@ class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
     }
 
     override suspend fun close(code: Short, reason: String) {
-        if(session.isActive){
-            session.close(CloseReason(code = code, message = reason))
-            crimsonHandler?.onClosed(code = code, reason = reason)
-            scope.cancel()
-        }
+        if(!session.isActive) error("session is not active")
+        session.close(CloseReason(code = code, message = reason))
+        crimsonHandler?.onClosed(code = code, reason = reason)
+        scope.cancel()
     }
 }

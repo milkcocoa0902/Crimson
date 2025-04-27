@@ -39,10 +39,24 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
 
-class CrimsonClient<SND: CrimsonData, RCV: CrimsonData>(
-    config: CrimsonConfig<SND, RCV>
-): CrimsonClientCore<SND, RCV>{
-    constructor(config: CrimsonConfig<SND, RCV>.()->Unit): this(CrimsonConfig<SND, RCV>().apply(config))
+/**
+ * CrimsonClient is a client for type-safe websocket communication.
+ * @param UPSTREAM upstream data type (send to server)
+ * @param DOWNSTREAM downstream data type (received from server)
+ * @property config crimson client config.
+ * @see CrimsonConfig
+ * @see CrimsonClientCore
+ */
+class CrimsonClient<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
+    config: CrimsonConfig<UPSTREAM, DOWNSTREAM>
+): CrimsonClientCore<UPSTREAM, DOWNSTREAM>{
+    /**
+     * constructor.
+     * @param config crimson client config.
+     * @see CrimsonConfig
+     * @see CrimsonClientCore
+     */
+    constructor(config: CrimsonConfig<UPSTREAM, DOWNSTREAM>.()->Unit): this(CrimsonConfig<UPSTREAM, DOWNSTREAM>().apply(config))
 
 
     private val _connectionStatus = MutableStateFlow(ConnectionState.CLOSED)
@@ -51,14 +65,14 @@ class CrimsonClient<SND: CrimsonData, RCV: CrimsonData>(
     private var webSocketSession: DefaultClientWebSocketSession? = null
     private var incomingFrameFlow: SharedFlow<Frame>? = null
 
-    private val _incomingMessageFlow = MutableSharedFlow<RCV>()
-    val incomingMessage: SharedFlow<RCV> get() = _incomingMessageFlow
+    private val _incomingMessageFlow = MutableSharedFlow<DOWNSTREAM>()
+    val incomingMessage: SharedFlow<DOWNSTREAM> get() = _incomingMessageFlow
 
     private val mutex = Mutex()
 
 
     private val ktorHttpClient: HttpClient = config.ktorHttpClient
-    private val crimsonHandler: CrimsonHandler<SND, RCV>? = config.crimsonHandler
+    private val crimsonHandler: CrimsonHandler<UPSTREAM, DOWNSTREAM>? = config.crimsonHandler
     private val retryPolicy: RetryPolicy = config.retryPolicy
     private val dispatcher: CoroutineDispatcher = config.dispatcher
     private val json: Json = config.json
@@ -77,6 +91,11 @@ class CrimsonClient<SND: CrimsonData, RCV: CrimsonData>(
     }
 
 
+    /**
+     * execute command.
+     * @param command crimson command.
+     * @see CrimsonCommand
+     */
     @OptIn(InternalAPI::class)
     override suspend fun execute(command: CrimsonCommand) {
         when(command){
@@ -136,14 +155,14 @@ class CrimsonClient<SND: CrimsonData, RCV: CrimsonData>(
         }
     }
 
-    override suspend fun send(data: SND) {
+    override suspend fun send(data: UPSTREAM) {
         check(_connectionStatus.value == ConnectionState.CONNECTED) { "WebSocket is not connected" }
         checkNotNull(webSocketSession) { "WebSocketSession is null" }
 
         webSocketSession!!.send(frame = Frame.Text(text = json.encodeToString(outgoingSerializer, data)))
     }
 
-    override suspend fun receive(timeout: Duration): RCV? {
+    override suspend fun receive(timeout: Duration): DOWNSTREAM {
         check(_connectionStatus.value == ConnectionState.CONNECTED) { "WebSocket is not connected" }
         checkNotNull(webSocketSession) { "WebSocketSession is null" }
 

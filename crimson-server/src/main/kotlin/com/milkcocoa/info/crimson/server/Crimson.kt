@@ -14,24 +14,48 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
+/**
+ * Configuration holder for [Crimson].
+ * @param name config name
+ * @param config config
+ * @see CrimsonServerConfig
+ * @see CrimsonData
+ */
 data class CrimsonConfigHolder(
     val name: String,
     val config: CrimsonServerConfig<CrimsonData, CrimsonData>
 )
 
 
+/**
+ * Plugin configuration for [Crimson].
+ */
 class CrimsonPluginConfig{
     private val configHolderList = mutableListOf<CrimsonConfigHolder>()
+
+    /**
+     *
+     */
     val configHolder: List<CrimsonConfigHolder> = configHolderList
 
+    /**
+     * add crimson config.
+     * @param name config name
+     * @param block config block. see [CrimsonServerConfig] for details.
+     */
     fun crimsonConfig(name: String, block: CrimsonServerConfig<CrimsonData, CrimsonData>.() -> Unit){
         configHolderList.add(CrimsonConfigHolder(name = name, config = CrimsonServerConfig<CrimsonData, CrimsonData>().apply(block)))
     }
 }
 
+/**
+ * [Crimson] plugin.
+ * @see CrimsonPluginConfig
+ */
 object Crimson: Plugin<ApplicationCallPipeline, CrimsonPluginConfig, Set<CrimsonConfigHolder>> {
     override val key: AttributeKey<Set<CrimsonConfigHolder>>
         get() = io.ktor.util.AttributeKey(AttributeKeyString)
+
     override fun install(pipeline: ApplicationCallPipeline, configure: CrimsonPluginConfig.() -> Unit): Set<CrimsonConfigHolder> {
         return CrimsonPluginConfig().apply(configure)
             .configHolder
@@ -43,6 +67,20 @@ object Crimson: Plugin<ApplicationCallPipeline, CrimsonPluginConfig, Set<Crimson
     const val AttributeKeyString = "CrimsonPluginConfigKey"
 }
 
+/**
+ * attach crimson server session to route.
+ * @param path path to attach
+ * @param config crimson server config name
+ * @param crimsonSessionRegistry crimson session registry
+ * @param block block to execute when the connection is established. see [CrimsonServerSession] for details.
+ * @see CrimsonServerSession
+ * @see CrimsonServerConfig
+ * @see CrimsonSessionRegistry
+ * @see CrimsonData
+ * @see io.ktor.server.websocket.WebSockets
+ * @see io.ktor.server.websocket.webSocket
+ * @see io.ktor.server.routing.Route
+ */
 fun<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData> Route.crimson(
     path: String,
     config: String,
@@ -79,7 +117,10 @@ fun<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData> Route.crimson(
     }
 }
 
-
+/**
+ * broadcast data to all crimson server sessions.
+ * @param data data to broadcast
+ */
 suspend fun<DOWNSTREAM: CrimsonData> List<CrimsonServerSession<*, DOWNSTREAM>>.broadcast(data: DOWNSTREAM){
     withContext(Dispatchers.IO) {
         this@broadcast.map {
