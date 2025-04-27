@@ -1,4 +1,4 @@
-package com.milkcocoa.info.crimson.sample
+package com.milkcocoa.info.crimson.sample.client
 
 import com.milkcocoa.info.crimson.ConnectionInfo
 import com.milkcocoa.info.crimson.CrimsonClient
@@ -8,7 +8,8 @@ import com.milkcocoa.info.crimson.CrimsonCoroutineDispatchers
 import com.milkcocoa.info.crimson.CrimsonHandler
 import com.milkcocoa.info.crimson.RetryPolicy
 import com.milkcocoa.info.crimson.WebSocketEndpointProvider
-import com.milkcocoa.info.crimson.core.CrimsonData
+import com.milkcocoa.info.crimson.sample.model.ChatMessage
+import com.milkcocoa.info.crimson.sample.model.ChatResponse
 import com.milkcocoa.info.crimson.server.Crimson
 import com.milkcocoa.info.crimson.server.broadcast
 import com.milkcocoa.info.crimson.server.crimson
@@ -20,73 +21,39 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 
-@Serializable
-data class SamplePayload(val a: String): CrimsonData
-
-class Payload: CrimsonData
-
-
-fun Application.test(){
-    install(Crimson){
-        crimsonConfig("test"){
-
-        }
-    }
-
-    routing {
-        crimson<Payload, Payload>(
-            path = "/test",
-            config = "test"
-        ){ sessionRegistry ->
-            launch {
-                sessionRegistry.crimsonServerSessionFlow.collect {
-                    println(it)
-                }
-            }
-
-            launch {
-                incomingMessageFlow.collect {
-                    sessionRegistry.all.broadcast(it)
-                }
-            }
-        }
-    }
-}
-
-
 
 fun main(){
-    val crimsonClient = CrimsonClient<SamplePayload, SamplePayload>{
-        crimsonHandler = object: CrimsonHandler<SamplePayload, SamplePayload> {
-            override suspend fun onConnect(crimson: CrimsonClientCore<SamplePayload, SamplePayload>, flow: SharedFlow<SamplePayload>) {
+    val crimsonClient = CrimsonClient{
+        crimsonHandler = object: CrimsonHandler<ChatMessage, ChatResponse> {
+            override suspend fun onConnect(crimson: CrimsonClientCore<ChatMessage, ChatResponse>, flow: SharedFlow<ChatResponse>) {
+                crimson.send(ChatMessage("hello"))
             }
 
             override suspend fun onError(e: Throwable) {
                 println(e)
             }
 
-            override suspend fun onClosed(code: Int, reason: String) {
+            override suspend fun onClosed(code: Short, reason: String) {
                 println("$code $reason")
             }
         }
 
         webSocketEndpointProvider = object: WebSocketEndpointProvider {
             override suspend fun build(): ConnectionInfo {
-                return ConnectionInfo("ws://127.0.0.1:54321")
+                return ConnectionInfo("ws://127.0.0.1:54321/test")
             }
         }
 
         retryPolicy = RetryPolicy.SimpleDelay(30.seconds)
         dispatcher = CrimsonCoroutineDispatchers.io
         json = Json
-        incomingSerializer = SamplePayload.serializer()
-        outgoingSerializer = SamplePayload.serializer()
+        incomingSerializer = ChatResponse.serializer()
+        outgoingSerializer = ChatMessage.serializer()
     }
 
     runBlocking {
@@ -101,7 +68,6 @@ fun main(){
     }
 
     CoroutineScope(Dispatchers.Default).launch {
-        crimsonClient.send(SamplePayload("hello"))
     }
 
 
