@@ -10,6 +10,7 @@ import io.ktor.websocket.readText
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,6 +28,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.Json
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
 
 class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
@@ -43,12 +45,12 @@ class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
     val connectedAt = Clock.System.now()
 
 
-    private var scope: CoroutineScope = CoroutineScope(dispatcher)
+    val scope: CoroutineScope = CoroutineScope(dispatcher)
 
     private val incomingFrameFlow = session.incoming.consumeAsFlow().shareIn(scope, started = SharingStarted.Companion.Eagerly, replay = 0)
 
     private val _incomingMessageFlow: MutableSharedFlow<UPSTREAM> = MutableSharedFlow()
-    val incomingMessageFlow: SharedFlow<UPSTREAM> get() = _incomingMessageFlow
+    val incomingMessageFlow: SharedFlow<UPSTREAM> get() = _incomingMessageFlow.shareIn(scope, started = SharingStarted.Companion.Eagerly, replay = 0)
 
     init {
         incomingFrameFlow.filterIsInstance<Frame.Text>()
@@ -71,6 +73,15 @@ class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
             }.launchIn(scope)
 
         scope.launch {
+            while (session.isActive){
+                delay(15_000.milliseconds)
+            }
+            // 実際にはscope.cancelだけ引き起こす
+            close(code = 1001, reason = "session closed by server")
+        }
+
+
+        scope.launch {
             crimsonHandler?.onConnect(
                 crimson = this@CrimsonServerSession,
                 flow = incomingMessageFlow
@@ -80,7 +91,7 @@ class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
 
 
     override suspend fun send(data: DOWNSTREAM) {
-        session.isActive.takeIf { it } ?: error("")
+        if(!session.isActive) return
         session.send(Frame.Text(text = json.encodeToString(outgoingSerializer, data)))
     }
 
@@ -92,9 +103,13 @@ class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
     }
 
     override suspend fun close(code: Short, reason: String) {
-        if(!session.isActive) error("session is not active")
-        session.close(CloseReason(code = code, message = reason))
-        crimsonHandler?.onClosed(code = code, reason = reason)
-        scope.cancel()
+        if(session.isActive){
+            session.close(CloseReason(code = code, message = reason))
+            crimsonHandler?.onClosed(code = code, reason = reason)
+        }
+
+        if(scope.isActive){
+            scope.cancel()
+        }
     }
 }

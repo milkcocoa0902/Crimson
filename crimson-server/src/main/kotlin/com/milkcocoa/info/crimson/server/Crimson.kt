@@ -11,6 +11,7 @@ import io.ktor.websocket.CloseReason
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
@@ -23,7 +24,7 @@ import java.util.UUID
  */
 data class CrimsonConfigHolder(
     val name: String,
-    val config: CrimsonServerConfig<CrimsonData, CrimsonData>
+    val config: CrimsonServerConfig<out CrimsonData, out CrimsonData>
 )
 
 
@@ -43,8 +44,9 @@ class CrimsonPluginConfig{
      * @param name config name
      * @param block config block. see [CrimsonServerConfig] for details.
      */
-    fun crimsonConfig(name: String, block: CrimsonServerConfig<CrimsonData, CrimsonData>.() -> Unit){
-        configHolderList.add(CrimsonConfigHolder(name = name, config = CrimsonServerConfig<CrimsonData, CrimsonData>().apply(block)))
+    fun<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>
+            crimsonConfig(name: String, block: CrimsonServerConfig<UPSTREAM, DOWNSTREAM>.() -> Unit){
+        configHolderList.add(CrimsonConfigHolder(name = name, config = CrimsonServerConfig<UPSTREAM, DOWNSTREAM>().apply(block)))
     }
 }
 
@@ -88,32 +90,42 @@ fun<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData> Route.crimson(
     block: suspend CrimsonServerSession<UPSTREAM, DOWNSTREAM>.(crimsonSessionRegistry: CrimsonSessionRegistry<UPSTREAM, DOWNSTREAM>) -> Unit = {}
 ){
     webSocket(path = path){
-        val sessionId = UUID.randomUUID()
-        val crimsonServerSessionConfigSet = call.application.pluginRegistry[io.ktor.util.AttributeKey<Set<CrimsonConfigHolder>>(
-            Crimson.AttributeKeyString
-        )]
-        val crimsonServerSessionConfig = (crimsonServerSessionConfigSet.find { it.name == config }?.config as? CrimsonServerConfig<UPSTREAM, DOWNSTREAM>) ?: error("crimson config not found")
-
-        val crimsonServerSession = CrimsonServerSession<UPSTREAM, DOWNSTREAM>(
-            config = crimsonServerSessionConfig,
-            session = this
-        )
-
         runCatching {
-            crimsonSessionRegistry.add(sessionId, crimsonServerSession)
-        }.getOrElse {
-            when(it){
-                is CrimsonSessionRegistry.ConnectionLimit -> {
-                    crimsonServerSession.close(code = CloseReason.Codes.VIOLATED_POLICY.code, reason = "connection limit exceeded")
+            val sessionId = UUID.randomUUID()
+            val crimsonServerSessionConfigSet = call.application.pluginRegistry[io.ktor.util.AttributeKey<Set<CrimsonConfigHolder>>(
+                Crimson.AttributeKeyString
+            )]
+            val crimsonServerSessionConfig = (crimsonServerSessionConfigSet.find { it.name == config }?.config as? CrimsonServerConfig<UPSTREAM, DOWNSTREAM>) ?: error("crimson config not found")
+
+            val crimsonServerSession = CrimsonServerSession(
+                config = crimsonServerSessionConfig,
+                session = this
+            )
+
+            runCatching {
+                crimsonSessionRegistry.add(sessionId, crimsonServerSession)
+            }.getOrElse {
+                when(it){
+                    is CrimsonSessionRegistry.ConnectionLimit -> {
+                        crimsonServerSession.close(code = CloseReason.Codes.VIOLATED_POLICY.code, reason = "connection limit exceeded")
+                    }
                 }
+                return@webSocket
             }
-            return@webSocket
+
+            runCatching {
+                withContext(crimsonServerSession.scope.coroutineContext){
+                    crimsonServerSession.block(crimsonSessionRegistry)
+                }
+            }.getOrElse {
+                crimsonServerSession.close(code = CloseReason.Codes.NORMAL.code, reason = "")
+                crimsonSessionRegistry.remove(sessionId)
+            }
+
+        }.getOrElse {
+            println(it)
+            throw it
         }
-
-        crimsonServerSession.block(crimsonSessionRegistry)
-
-        crimsonServerSession.close(code = CloseReason.Codes.NORMAL.code, reason = "")
-        crimsonSessionRegistry.remove(sessionId)
     }
 }
 

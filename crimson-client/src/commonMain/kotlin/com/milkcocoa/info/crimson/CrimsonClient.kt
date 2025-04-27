@@ -141,6 +141,7 @@ class CrimsonClient<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
             is CrimsonCommand.Disconnect -> {
                 mutex.withLock {
                     _connectionStatus.value = ConnectionState.CLOSED
+                    crimsonHandler?.onClosed(command.code, command.reason)
                     webSocketSession?.close(reason = CloseReason(code = command.code.toShort(), message = command.reason))
                     webSocketSession = null
                     incomingFrameFlow = null

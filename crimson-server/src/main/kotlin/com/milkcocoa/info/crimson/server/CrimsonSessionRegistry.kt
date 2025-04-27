@@ -36,7 +36,7 @@ class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
     /**
      * max lifetime of session.
      */
-    private val maxLifetime: Duration = 3600.seconds,
+    private val maxLifetime: Duration = 300.seconds,
     /**
      * watch dog interval.
      */
@@ -87,6 +87,17 @@ class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
         }
     }
 
+    suspend fun removeRange(vararg sessionIds: UUID){
+        mutex.withLock {
+            runCatching {
+                sessionIds.forEach {
+                    _crimsonServerSessionMap.remove(it)?.close()
+                }
+            }
+            _crimsonServerSessionFlow.emit(_crimsonServerSessionMap.values.toList())
+        }
+    }
+
     /**
      * get crimson server session.
      * @param sessionId session id
@@ -113,20 +124,10 @@ class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
     @OptIn(ExperimentalTime::class)
     suspend fun enforceTimeout() {
         mutex.withLock {
-            withContext(Dispatchers.Default) {
-                val now = Clock.System.now()
-                _crimsonServerSessionMap
-                    .filterValues { it.connectedAt.plus(maxLifetime) < now }
-                    .map {
-                        async {
-                            runCatching {
-                                semaphore.withPermit {
-                                    remove(it.key)
-                                }
-                            }
-                        }
-                    }
-            }
+            val now = Clock.System.now()
+            _crimsonServerSessionMap
+                .filterValues { it.connectedAt.plus(maxLifetime) < now }
+                .let { removeRange(*it.keys.toTypedArray()) }
         }
     }
 
@@ -138,16 +139,13 @@ class CrimsonSessionRegistry<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
             while (true) {
                 delay(watchDogInterval)
                 val now = Clock.System.now()
-                mutex.withLock {
-                    val sample = _crimsonServerSessionMap.keys
-                        .shuffled()
-                        .take(maxConnection.div(10).coerceAtLeast(100))
+                val sample = _crimsonServerSessionMap.keys
+                    .shuffled()
+                    .take(maxConnection.div(10).coerceAtLeast(100))
 
-                    _crimsonServerSessionMap.filterKeys { sample.contains(it) }
-                        .filterValues { it.connectedAt.plus(maxLifetime) < now }
-                        .map { async { runCatching{ semaphore.withPermit { remove(it.key) } } } }
-                        .awaitAll()
-                }
+                _crimsonServerSessionMap.filterKeys { sample.contains(it) }
+                    .filterValues { it.connectedAt.plus(maxLifetime) < now }
+                    .let { removeRange(*it.keys.toTypedArray()) }
             }
         }
     }

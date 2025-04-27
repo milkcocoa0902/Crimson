@@ -26,7 +26,7 @@ interface CrimsonHandler<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>{
      * @param code close code
      * @param reason close reason
      */
-    suspend fun onClosed(code: Int, reason: String)
+    suspend fun onClosed(code: Short, reason: String)
 
     /**
      * Called when an error occurs.
