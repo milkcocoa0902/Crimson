@@ -1,16 +1,20 @@
 package com.milkcocoa.info.crimson.sample
 
 import com.milkcocoa.info.crimson.ConnectionInfo
-import com.milkcocoa.info.crimson.CrimsonData
-import com.milkcocoa.info.crimson.Crimson
+import com.milkcocoa.info.crimson.CrimsonClient
 import com.milkcocoa.info.crimson.CrimsonCommand
-import com.milkcocoa.info.crimson.CrimsonCore
+import com.milkcocoa.info.crimson.CrimsonClientCore
 import com.milkcocoa.info.crimson.CrimsonCoroutineDispatchers
 import com.milkcocoa.info.crimson.CrimsonHandler
 import com.milkcocoa.info.crimson.RetryPolicy
 import com.milkcocoa.info.crimson.WebSocketEndpointProvider
-import io.ktor.client.HttpClient
-import io.ktor.client.plugins.websocket.WebSockets
+import com.milkcocoa.info.crimson.core.CrimsonData
+import com.milkcocoa.info.crimson.server.Crimson
+import com.milkcocoa.info.crimson.server.broadcast
+import com.milkcocoa.info.crimson.server.crimson
+import io.ktor.server.application.Application
+import io.ktor.server.application.install
+import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharedFlow
@@ -18,8 +22,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import okhttp3.OkHttpClient
-import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
@@ -27,15 +29,42 @@ import kotlin.time.Duration.Companion.seconds
 @Serializable
 data class SamplePayload(val a: String): CrimsonData
 
+class Payload: CrimsonData
+
+
+fun Application.test(){
+    install(Crimson){
+        crimsonConfig("test"){
+
+        }
+    }
+
+    routing {
+        crimson<Payload, Payload>(
+            path = "/test",
+            config = "test"
+        ){ sessionRegistry ->
+            launch {
+                sessionRegistry.crimsonServerSessionFlow.collect {
+                    println(it)
+                }
+            }
+
+            launch {
+                incomingMessageFlow.collect {
+                    sessionRegistry.all().broadcast(it)
+                }
+            }
+        }
+    }
+}
+
+
 
 fun main(){
-    val crimson = Crimson<SamplePayload, SamplePayload>{
+    val crimsonClient = CrimsonClient<SamplePayload, SamplePayload>{
         crimsonHandler = object: CrimsonHandler<SamplePayload, SamplePayload> {
-            override suspend fun onConnect(crimson: CrimsonCore<SamplePayload, SamplePayload>, flow: SharedFlow<SamplePayload>) {
-                crimson.execute(CrimsonCommand.StartHealthCheck)
-                CoroutineScope(Dispatchers.Default).launch {
-                    flow.collect { payload -> println(payload.a) }
-                }
+            override suspend fun onConnect(crimson: CrimsonClientCore<SamplePayload, SamplePayload>, flow: SharedFlow<SamplePayload>) {
             }
 
             override suspend fun onError(e: Throwable) {
@@ -61,18 +90,18 @@ fun main(){
     }
 
     runBlocking {
-        crimson.execute(CrimsonCommand.Connect)
+        crimsonClient.execute(CrimsonCommand.Connect)
     }
 
     CoroutineScope(Dispatchers.Default).launch {
-        crimson.connectionStatus.collect { isConnected ->println(isConnected) }
+        crimsonClient.connectionStatus.collect { isConnected ->println(isConnected) }
     }
     CoroutineScope(Dispatchers.Default).launch {
-        crimson.incoming.collect { incoming -> println(incoming) }
+        crimsonClient.incomingMessage.collect { incoming -> println(incoming) }
     }
 
     CoroutineScope(Dispatchers.Default).launch {
-        crimson.send(SamplePayload("hello"))
+        crimsonClient.send(SamplePayload("hello"))
     }
 
 

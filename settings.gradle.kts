@@ -34,5 +34,8 @@ plugins {
 
 rootProject.name = "Crimson"
 include("annotation")
-include("crimson")
+include("crimson-client")
 include("sample")
+
+include("crimson-server")
+include("crimson-core")
