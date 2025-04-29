@@ -3,7 +3,7 @@ package com.milkcocoa.info.crimson.sample.server
 import com.milkcocoa.info.crimson.sample.model.ChatMessage
 import com.milkcocoa.info.crimson.sample.model.ChatResponse
 import com.milkcocoa.info.crimson.server.Crimson
-import com.milkcocoa.info.crimson.server.CrimsonSessionRegistry
+import com.milkcocoa.info.crimson.server.cluster.CrimsonLocalSessionCluster
 import com.milkcocoa.info.crimson.server.broadcast
 import com.milkcocoa.info.crimson.server.crimson
 import io.ktor.server.application.Application
@@ -33,15 +33,15 @@ fun Application.test(){
     }
 
     routing {
-        val crimsonSessionRegistry = CrimsonSessionRegistry<ChatMessage, ChatResponse>()
+        val crimsonSessionCluster = CrimsonLocalSessionCluster<ChatMessage, ChatResponse>()
         launch {
-            crimsonSessionRegistry.crimsonServerSessionFlow.collect {
+            crimsonSessionCluster.crimsonServerSessionFlow.collect {
                 println(it)
             }
         }
         crimson<ChatMessage, ChatResponse>(
             path = "/test",
-            crimsonSessionRegistry = crimsonSessionRegistry,
+            crimsonSessionCluster = crimsonSessionCluster,
             config = "test"
         ){ sessionRegistry ->
             incomingMessageFlow.collect {

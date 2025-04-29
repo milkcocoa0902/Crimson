@@ -17,6 +17,7 @@ dependencies {
     implementation("io.ktor:ktor-server-websockets:3.1.2")
     api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
     api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+    api("io.lettuce:lettuce-core:6.5.5.RELEASE")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
     testImplementation(kotlin("test"))
 }

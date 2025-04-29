@@ -10,7 +10,8 @@
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/annotation" />
-            <option value="$PROJECT_DIR$/crimson" />
+            <option value="$PROJECT_DIR$/crimson-client" />
+            <option value="$PROJECT_DIR$/crimson-core" />
             <option value="$PROJECT_DIR$/crimson-server" />
             <option value="$PROJECT_DIR$/sample" />
           </set>

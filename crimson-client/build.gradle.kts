@@ -1,3 +1,7 @@
+import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform") version "2.1.20"
     kotlin("plugin.serialization") version "2.1.20"
@@ -8,14 +12,19 @@ group = "com.milkcocoa.info.crimson"
 version = "unspecified"
 
 kotlin {
+    androidTarget {
+        @OptIn(ExperimentalKotlinGradlePluginApi::class)
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_17)
+        }
+        publishLibraryVariants(
+            "release",
+//            "debug"
+        )
+    }
     jvm {
         compilations.all {
-            kotlinOptions.jvmTarget = "17"
-        }
-    }
-    androidTarget {
-        compilations.all {
-            kotlinOptions.jvmTarget = "17"
+            kotlinOptions.jvmTarget = JvmTarget.JVM_17.target
         }
     }
     js(IR){
@@ -69,6 +78,18 @@ kotlin {
 
 android {
     namespace = "com.milkcocoa.info.crimson"
-    compileSdk = 34
-
+    compileSdk =
+        libs.versions.android.compileSdk
+            .get()
+            .toInt()
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    defaultConfig {
+        minSdk =
+            libs.versions.android.minSdk
+                .get()
+                .toInt()
+    }
 }

@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="crimson-client-js">
+    <output-path>$PROJECT_DIR$/crimson-client/build/libs</output-path>
+    <root id="archive" name="crimson-client-js.jar">
+      <element id="module-output" name="Crimson.crimson-client.jsMain" />
+    </root>
+  </artifact>
+</component>

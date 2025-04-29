@@ -1,6 +1,8 @@
 package com.milkcocoa.info.crimson.server
 
 import com.milkcocoa.info.crimson.core.CrimsonData
+import com.milkcocoa.info.crimson.server.cluster.CrimsonLocalSessionCluster
+import com.milkcocoa.info.crimson.server.cluster.CrimsonSessionCluster
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.Plugin
 import io.ktor.server.application.pluginRegistry
@@ -11,7 +13,6 @@ import io.ktor.websocket.CloseReason
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
@@ -73,11 +74,11 @@ object Crimson: Plugin<ApplicationCallPipeline, CrimsonPluginConfig, Set<Crimson
  * attach crimson server session to route.
  * @param path path to attach
  * @param config crimson server config name
- * @param crimsonSessionRegistry crimson session registry
+ * @param crimsonSessionCluster crimson session registry
  * @param block block to execute when the connection is established. see [CrimsonServerSession] for details.
  * @see CrimsonServerSession
  * @see CrimsonServerConfig
- * @see CrimsonSessionRegistry
+ * @see com.milkcocoa.info.crimson.server.cluster.CrimsonLocalSessionCluster
  * @see CrimsonData
  * @see io.ktor.server.websocket.WebSockets
  * @see io.ktor.server.websocket.webSocket
@@ -86,8 +87,8 @@ object Crimson: Plugin<ApplicationCallPipeline, CrimsonPluginConfig, Set<Crimson
 fun<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData> Route.crimson(
     path: String,
     config: String,
-    crimsonSessionRegistry: CrimsonSessionRegistry<UPSTREAM, DOWNSTREAM> = CrimsonSessionRegistry(),
-    block: suspend CrimsonServerSession<UPSTREAM, DOWNSTREAM>.(crimsonSessionRegistry: CrimsonSessionRegistry<UPSTREAM, DOWNSTREAM>) -> Unit = {}
+    crimsonSessionCluster: CrimsonSessionCluster<UPSTREAM, DOWNSTREAM> = CrimsonLocalSessionCluster(),
+    block: suspend CrimsonServerSession<UPSTREAM, DOWNSTREAM>.(crimsonSessionRegistry: CrimsonSessionCluster<UPSTREAM, DOWNSTREAM>) -> Unit = {}
 ){
     webSocket(path = path){
         runCatching {
@@ -103,10 +104,10 @@ fun<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData> Route.crimson(
             )
 
             runCatching {
-                crimsonSessionRegistry.add(sessionId, crimsonServerSession)
+                crimsonSessionCluster.add(sessionId, crimsonServerSession)
             }.getOrElse {
                 when(it){
-                    is CrimsonSessionRegistry.ConnectionLimit -> {
+                    is CrimsonSessionCluster.ConnectionLimit -> {
                         crimsonServerSession.close(code = CloseReason.Codes.VIOLATED_POLICY.code, reason = "connection limit exceeded")
                     }
                 }
@@ -115,11 +116,11 @@ fun<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData> Route.crimson(
 
             runCatching {
                 withContext(crimsonServerSession.scope.coroutineContext){
-                    crimsonServerSession.block(crimsonSessionRegistry)
+                    crimsonServerSession.block(crimsonSessionCluster)
                 }
             }.getOrElse {
                 crimsonServerSession.close(code = CloseReason.Codes.NORMAL.code, reason = "")
-                crimsonSessionRegistry.remove(sessionId)
+                crimsonSessionCluster.remove(sessionId)
             }
 
         }.getOrElse {
