@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 plugins {
     id("org.jetbrains.kotlin.multiplatform") version "2.1.20"
     kotlin("plugin.serialization") version "2.1.20"
-    id("com.android.library") version "8.9.0"
+    id("com.android.library") version "8.9.2"
 }
 
 group = "com.milkcocoa.info.crimson"
@@ -37,34 +37,34 @@ kotlin {
 
     sourceSets{
         commonMain.dependencies {
-            api("io.ktor:ktor-client-core:3.1.2")
-            api("io.ktor:ktor-client-websockets:3.1.2")
-            api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
+            api(libs.ktor.client.core)
+            api(libs.ktor.client.websockets)
+            api(libs.kotlinx.coroutines)
 
             api(project(":crimson-core"))
         }
 
         commonTest.dependencies {
             implementation(kotlin("test"))
-            implementation("io.ktor:ktor-server-core:3.1.2")
-            implementation("io.ktor:ktor-server-cio:3.1.2")
-            implementation("io.ktor:ktor-server-websockets:3.1.2")
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
+            implementation(libs.ktor.server.core)
+            implementation(libs.ktor.server.cio)
+            implementation(libs.ktor.server.websockets)
+            implementation(libs.kotlinx.coroutines.test)
         }
 
         androidMain.dependencies {
-            implementation("io.ktor:ktor-client-cio:3.1.2")
-            implementation("io.ktor:ktor-client-okhttp:3.1.2")
+            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.okhttp)
         }
 
         jvmMain.dependencies {
-            implementation("io.ktor:ktor-client-cio:3.1.2")
-            implementation("io.ktor:ktor-client-okhttp:3.1.2")
+            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.okhttp)
         }
 
         jsMain.dependencies {
-            implementation("io.ktor:ktor-client-cio:3.1.2")
-            implementation("io.ktor:ktor-client-js:3.1.2")
+            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.js)
         }
 
 //        iosMain.dependencies {

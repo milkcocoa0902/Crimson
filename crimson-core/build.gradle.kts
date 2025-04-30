@@ -5,7 +5,7 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
     kotlin("multiplatform") version "2.1.20"
-    id("com.android.library") version "8.9.0"
+    id("com.android.library") version "8.9.2"
 }
 
 group = "com.milkcocoa.info.crimson"
@@ -30,10 +30,10 @@ kotlin {
     js(IR)
     sourceSets{
         commonMain.dependencies {
-            api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
-            api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-            api("org.jetbrains.kotlinx:kotlinx-serialization-protobuf:1.8.1")
-            api("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.8.1")
+            api(libs.kotlinx.serialization.core)
+            api(libs.kotlinx.serialization.json)
+            api(libs.kotlinx.serialization.protobuf)
+            api(libs.kotlinx.serialization.cbor)
         }
     }
     jvmToolchain(17)

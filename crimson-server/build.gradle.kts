@@ -12,11 +12,11 @@ repositories {
 
 dependencies {
     api(project(":crimson-core"))
-    api("io.ktor:ktor-server-core:3.1.2")
-    api("io.ktor:ktor-server-cio:3.1.2")
-    implementation("io.ktor:ktor-server-websockets:3.1.2")
-    api("io.lettuce:lettuce-core:6.5.5.RELEASE")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.1")
+    api(libs.ktor.server.core)
+    api(libs.ktor.server.cio)
+    implementation(libs.ktor.server.websockets)
+    api(libs.lettuce.core)
+    testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(kotlin("test"))
 }
 
