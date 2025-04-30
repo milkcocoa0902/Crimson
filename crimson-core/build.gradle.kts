@@ -1,3 +1,4 @@
+import org.gradle.kotlin.dsl.api
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
@@ -29,7 +30,10 @@ kotlin {
     js(IR)
     sourceSets{
         commonMain.dependencies {
-
+            api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+            api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+            api("org.jetbrains.kotlinx:kotlinx-serialization-protobuf:1.8.1")
+            api("org.jetbrains.kotlinx:kotlinx-serialization-cbor:1.8.1")
         }
     }
     jvmToolchain(17)

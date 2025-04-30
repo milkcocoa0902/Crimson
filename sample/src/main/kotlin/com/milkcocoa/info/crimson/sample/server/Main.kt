@@ -1,5 +1,6 @@
 package com.milkcocoa.info.crimson.sample.server
 
+import com.milkcocoa.info.crimson.core.ContentConverter
 import com.milkcocoa.info.crimson.sample.model.ChatMessage
 import com.milkcocoa.info.crimson.sample.model.ChatResponse
 import com.milkcocoa.info.crimson.server.Crimson
@@ -15,8 +16,12 @@ import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
 import kotlinx.coroutines.launch
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.protobuf.ProtoBuf
 import kotlin.time.Duration.Companion.seconds
 
+@OptIn(ExperimentalSerializationApi::class)
 fun Application.test(){
     install(WebSockets) {
         pingPeriod = 15.seconds
@@ -27,8 +32,11 @@ fun Application.test(){
 
     install(Crimson){
         crimsonConfig("test"){
-            incomingSerializer = ChatMessage.serializer()
-            outgoingSerializer = ChatResponse.serializer()
+            contentConverter = ContentConverter.Binary.Protobuf(
+                protobuf = ProtoBuf.Default,
+                upstreamSerializer = ChatMessage.serializer(),
+                downstreamSerializer = ChatResponse.serializer()
+            )
         }
     }
 

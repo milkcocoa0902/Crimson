@@ -1,5 +1,6 @@
 package com.milkcocoa.info.crimson.server
 
+import com.milkcocoa.info.crimson.core.ContentConverter
 import com.milkcocoa.info.crimson.core.CrimsonData
 import io.ktor.server.websocket.WebSocketServerSession
 import io.ktor.websocket.CloseReason
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.consumeAsFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.shareIn
@@ -37,9 +39,7 @@ class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
 ) : CrimsonServerCore<UPSTREAM, DOWNSTREAM>{
     private val crimsonHandler: CrimsonHandler<UPSTREAM, DOWNSTREAM>? = config.crimsonHandler
     private val dispatcher: CoroutineDispatcher = config.dispatcher
-    private val json: Json = config.json
-    private val incomingSerializer = config.incomingSerializer ?: error("")
-    private val outgoingSerializer = config.outgoingSerializer ?: error("")
+    private val contentConverter = config.contentConverter
 
     @OptIn(ExperimentalTime::class)
     val connectedAt = Clock.System.now()
@@ -53,25 +53,36 @@ class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
     val incomingMessageFlow: SharedFlow<UPSTREAM> get() = _incomingMessageFlow.shareIn(scope, started = SharingStarted.Companion.Eagerly, replay = 0)
 
     init {
-        incomingFrameFlow.filterIsInstance<Frame.Text>()
-            .mapNotNull { frame -> runCatching{ json.decodeFromString(incomingSerializer, frame.readText()) }.getOrNull() }
-            .catch { e ->
-                crimsonHandler?.onError(e)
-                this@CrimsonServerSession.close(code = 4001, "incoming frame error")
-            }.onEach {
-                _incomingMessageFlow.emit(it)
-            }.launchIn(scope)
+        when(contentConverter){
+            is ContentConverter.Binary -> {
+                incomingFrameFlow
+                    .filterIsInstance<Frame.Binary>()
+                    .map { frameBinary ->  frameBinary.readBytes() }
+                    .mapNotNull { bytes -> runCatching{ (contentConverter as ContentConverter.Binary).decodeUpstream(bytes) }.getOrNull() }
+                    .catch { e ->
+                        crimsonHandler?.onError(e)
+                        this@CrimsonServerSession.close(code = 4001, "incoming frame error")
+                    }.onEach {
+                        _incomingMessageFlow.emit(it)
+                    }.launchIn(scope)
+            }
+            is ContentConverter.Text -> {
+                incomingFrameFlow
+                    .filterIsInstance<Frame.Text>()
+                    .map { frameText -> frameText.readText() }
+                    .mapNotNull { text -> runCatching{ (contentConverter as ContentConverter.Text).decodeUpstream(text) }.getOrNull() }
+                    .catch { e ->
+                        crimsonHandler?.onError(e)
+                        this@CrimsonServerSession.close(code = 4001, "incoming frame error")
+                    }.onEach {
+                        _incomingMessageFlow.emit(it)
+                    }.launchIn(scope)
 
-
-        incomingFrameFlow.filterIsInstance<Frame.Binary>()
-            .mapNotNull { frame -> runCatching { json.decodeFromString(incomingSerializer, frame.readBytes().decodeToString()) }.getOrNull() }
-            .catch { e ->
-                crimsonHandler?.onError(e)
-                this@CrimsonServerSession.close(code = 4001, "incoming frame error")
-            }.onEach {
-                _incomingMessageFlow.emit(it)
-            }.launchIn(scope)
-
+            }
+            is ContentConverter.Nothing -> {
+                println("ContentConverter.Nothing is selected. No data will be received. ")
+            }
+        }
         scope.launch {
             while (session.isActive){
                 delay(15_000.milliseconds)
@@ -92,7 +103,28 @@ class CrimsonServerSession<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>(
 
     override suspend fun send(data: DOWNSTREAM) {
         if(!session.isActive) return
-        session.send(Frame.Text(text = json.encodeToString(outgoingSerializer, data)))
+        when(contentConverter){
+            is ContentConverter.Binary -> {
+                session.send(
+                    frame = Frame.Binary(
+                        fin = true,
+                        data = contentConverter.encodeDownstream(data)
+                    )
+                )
+            }
+
+            is ContentConverter.Text -> {
+                session.send(
+                    frame = Frame.Text(
+                        text = contentConverter.encodeDownstream(data)
+                    )
+                )
+            }
+
+            is ContentConverter.Nothing -> {
+                println("ContentConverter.Nothing is selected. No data will be sent.")
+            }
+        }
     }
 
 

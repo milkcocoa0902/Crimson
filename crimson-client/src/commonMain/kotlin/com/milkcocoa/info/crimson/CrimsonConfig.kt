@@ -1,11 +1,10 @@
 package com.milkcocoa.info.crimson
 
+import com.milkcocoa.info.crimson.core.ContentConverter
 import com.milkcocoa.info.crimson.core.CrimsonData
 import io.ktor.client.HttpClient
 import io.ktor.websocket.CloseReason
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.json.Json
 
 
 internal expect val defaultCrimsonHttpClient: HttpClient
@@ -45,21 +44,19 @@ internal val defaultWebSocketEndpointProvider = object: WebSocketEndpointProvide
  * @param DOWNSTREAM downstream data type (send to server)
  * @see CrimsonHandler
  * @see CrimsonData
- * @see Json
  * @see WebSocketEndpointProvider
  * @see defaultWebSocketEndpointProvider
  * @see defaultCrimsonHttpClient
  * @see CrimsonCoroutineDispatchers
  */
-class CrimsonConfig<UPSTREAM: CrimsonData,  DOWNSTREAM: CrimsonData>() {
+class CrimsonConfig<UPSTREAM: CrimsonData,  DOWNSTREAM: CrimsonData>(
+) {
     var ktorHttpClient: HttpClient = defaultCrimsonHttpClient
     var webSocketEndpointProvider: WebSocketEndpointProvider = defaultWebSocketEndpointProvider
     var crimsonHandler: CrimsonHandler<UPSTREAM, DOWNSTREAM>? = null
     var retryPolicy: RetryPolicy = RetryPolicy.Never
     var dispatcher: CoroutineDispatcher = CrimsonCoroutineDispatchers.io
-    var json: Json = Json.Default
-    var incomingSerializer: KSerializer<DOWNSTREAM>? = null
-    var outgoingSerializer: KSerializer<UPSTREAM>? = null
+    var contentConverter: ContentConverter<UPSTREAM, DOWNSTREAM> = ContentConverter.Nothing()
     var abnormalCloseCodePredicate: (code: Short)->Boolean = { it != CloseReason.Codes.NORMAL.code }
     var abnormalCloseReasonPredicate: (String) -> Boolean = { false }
 }

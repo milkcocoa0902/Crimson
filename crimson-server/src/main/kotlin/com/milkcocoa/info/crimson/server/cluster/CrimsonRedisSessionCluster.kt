@@ -1,5 +1,6 @@
 package com.milkcocoa.info.crimson.server.cluster
 
+import com.milkcocoa.info.crimson.core.ContentConverter
 import com.milkcocoa.info.crimson.core.CrimsonData
 import com.milkcocoa.info.crimson.server.CrimsonServerSession
 import com.milkcocoa.info.crimson.server.broadcast
@@ -30,8 +31,7 @@ class CrimsonRedisSessionCluster<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>
     useSsl: Boolean = false,
     topicId: String,
     private val nodeId: UUID = UUID.randomUUID(),
-    private val json: Json = Json.Default,
-    private val downstreamSerializer: KSerializer<DOWNSTREAM>,
+    private val contentConverter: ContentConverter<*, DOWNSTREAM>,
     private val broadcastFilter: (CrimsonServerSession<UPSTREAM, DOWNSTREAM>) -> Boolean = { true },
     /**
      * max connection count locally.
@@ -53,16 +53,19 @@ class CrimsonRedisSessionCluster<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>
     private val client = RedisClient.create("redis://$redisHost:$redisPort?useSsl=$useSsl")
     private val broadcastKey = "crimson:broadcast:$topicId"
 
+    @OptIn(ExperimentalStdlibApi::class)
     val connection = client.connectPubSub().sync().also { con ->
         con.getStatefulConnection().addListener(object : RedisPubSubListener<String, String> {
-            override fun message(p0: String?, p1: String?) {
-                println("$p0, $p1")
+            override fun message(p0: String?, data: String?) {
                 CoroutineScope(Dispatchers.Default).launch {
-                    p1?.let { json.decodeFromString(downstreamSerializer, it) }
-                        ?.let {
-                            all.filter(broadcastFilter)
-                                .broadcast(it)
+                    data?.let {
+                        when(contentConverter){
+                            is ContentConverter.Text -> all.filter(broadcastFilter).broadcast(contentConverter.decodeDownstream(data))
+                            is ContentConverter.Binary -> all.filter(broadcastFilter).broadcast(contentConverter.decodeDownstream(data.hexToByteArray()))
+                            is ContentConverter.Nothing -> println("ContentConverter.Nothing is selected. No data will be broadcasted.")
+
                         }
+                    }
                 }
             }
 
@@ -168,11 +171,23 @@ class CrimsonRedisSessionCluster<UPSTREAM: CrimsonData, DOWNSTREAM: CrimsonData>
         }
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     override suspend fun broadcast(
         data: DOWNSTREAM,
         filter: (CrimsonServerSession<UPSTREAM, DOWNSTREAM>) -> Boolean
     ) {
-        connection.publish(broadcastKey, json.encodeToString(downstreamSerializer, data))
+        when(contentConverter){
+            is ContentConverter.Text -> connection.publish(
+                broadcastKey,
+                contentConverter.encodeDownstream(data)
+            )
+            is ContentConverter.Binary -> connection.publish(
+                broadcastKey,
+                contentConverter.encodeDownstream(data).toHexString()
+            )
+            is ContentConverter.Nothing -> println("ContentConverter.Nothing is selected. No data will be broadcasted.")
+
+        }
     }
 
     /**

@@ -37,9 +37,6 @@ kotlin {
 
     sourceSets{
         commonMain.dependencies {
-            api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
-            api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-
             api("io.ktor:ktor-client-core:3.1.2")
             api("io.ktor:ktor-client-websockets:3.1.2")
             api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
