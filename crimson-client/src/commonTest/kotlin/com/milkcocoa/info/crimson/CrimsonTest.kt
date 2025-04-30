@@ -1,5 +1,7 @@
 package com.milkcocoa.info.crimson
 
+import com.milkcocoa.info.crimson.core.ContentConverter
+import com.milkcocoa.info.crimson.core.CrimsonData
 import io.ktor.serialization.WebsocketContentConverter
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -32,23 +34,6 @@ import kotlin.time.Duration.Companion.seconds
 fun Application.module() {
     install(WebSockets){
         maxFrameSize = 8192
-        contentConverter = object: WebsocketContentConverter{
-            override suspend fun deserialize(
-                charset: Charset,
-                typeInfo: TypeInfo,
-                content: Frame
-            ): Any? {
-                TODO("Not yet implemented")
-            }
-
-            override fun isApplicable(frame: Frame): Boolean {
-                TODO("Not yet implemented")
-            }
-
-            override suspend fun serialize(charset: Charset, typeInfo: TypeInfo, value: Any?): Frame {
-                return super.serialize(charset, typeInfo, value)
-            }
-        }
     }
 
     routing {
@@ -105,7 +90,7 @@ fun startTestServer(
 
 
 @Serializable
-data class SamplePayload(val a: String): CrimsonData{
+data class SamplePayload(val a: String): CrimsonData {
     override fun equals(other: Any?): Boolean {
         return (other is SamplePayload) && (this.a == other.a)
     }
@@ -139,7 +124,7 @@ class CrimsonTest {
 
                 override suspend fun onError(e: Throwable) { }
 
-                override suspend fun onClosed(code: Int, reason: String) {}
+                override suspend fun onClosed(code: Short, reason: String) {}
             }
 
             webSocketEndpointProvider = object: WebSocketEndpointProvider {
@@ -150,9 +135,11 @@ class CrimsonTest {
 
             retryPolicy = RetryPolicy.SimpleDelay(30.seconds)
             dispatcher = CrimsonCoroutineDispatchers.io
-            json = Json
-            incomingSerializer = SamplePayload.serializer()
-            outgoingSerializer = SamplePayload.serializer()
+            contentConverter = ContentConverter.Text.Json(
+                json = Json,
+                upstreamSerializer = SamplePayload.serializer(),
+                downstreamSerializer = SamplePayload.serializer()
+            )
         }
 
         val actual = async {
@@ -170,7 +157,7 @@ class CrimsonTest {
 
                 override suspend fun onError(e: Throwable) { }
 
-                override suspend fun onClosed(code: Int, reason: String) { }
+                override suspend fun onClosed(code: Short, reason: String) {}
             }
 
             webSocketEndpointProvider = object: WebSocketEndpointProvider {
@@ -181,9 +168,11 @@ class CrimsonTest {
 
             retryPolicy = RetryPolicy.SimpleDelay(30.seconds)
             dispatcher = CrimsonCoroutineDispatchers.io
-            json = Json
-            incomingSerializer = SamplePayload.serializer()
-            outgoingSerializer = SamplePayload.serializer()
+            contentConverter = ContentConverter.Text.Json(
+                json = Json,
+                upstreamSerializer = SamplePayload.serializer(),
+                downstreamSerializer = SamplePayload.serializer()
+            )
         }
 
         val actual = async {
@@ -207,7 +196,7 @@ class CrimsonTest {
 
                 override suspend fun onError(e: Throwable) { }
 
-                override suspend fun onClosed(code: Int, reason: String) {
+                override suspend fun onClosed(code: Short, reason: String) {
                     println("onClosed: $code $reason")
                 }
             }
@@ -220,9 +209,11 @@ class CrimsonTest {
 
             retryPolicy = RetryPolicy.SimpleDelay(15.seconds)
             dispatcher = CrimsonCoroutineDispatchers.io
-            json = Json
-            incomingSerializer = SamplePayload.serializer()
-            outgoingSerializer = SamplePayload.serializer()
+            contentConverter = ContentConverter.Text.Json(
+                json = Json,
+                upstreamSerializer = SamplePayload.serializer(),
+                downstreamSerializer = SamplePayload.serializer()
+            )
         }
 
         launch {
@@ -247,7 +238,9 @@ class CrimsonTest {
 
                 override suspend fun onError(e: Throwable) { }
 
-                override suspend fun onClosed(code: Int, reason: String) { }
+                override suspend fun onClosed(code: Short, reason: String) {
+                    println("onClosed: $code $reason")
+                }
             }
 
             webSocketEndpointProvider = object: WebSocketEndpointProvider {
@@ -258,9 +251,11 @@ class CrimsonTest {
 
             retryPolicy = RetryPolicy.SimpleDelay(15.seconds)
             dispatcher = CrimsonCoroutineDispatchers.io
-            json = Json
-            incomingSerializer = SamplePayload.serializer()
-            outgoingSerializer = SamplePayload.serializer()
+            contentConverter = ContentConverter.Text.Json(
+                json = Json,
+                upstreamSerializer = SamplePayload.serializer(),
+                downstreamSerializer = SamplePayload.serializer()
+            )
         }
 
         val actual = async {
@@ -288,7 +283,9 @@ class CrimsonTest {
 
                 override suspend fun onError(e: Throwable) { }
 
-                override suspend fun onClosed(code: Int, reason: String) { }
+                override suspend fun onClosed(code: Short, reason: String) {
+                    println("onClosed: $code $reason")
+                }
             }
 
             webSocketEndpointProvider = object: WebSocketEndpointProvider {
@@ -299,9 +296,11 @@ class CrimsonTest {
 
             retryPolicy = RetryPolicy.SimpleDelay(30.seconds)
             dispatcher = CrimsonCoroutineDispatchers.io
-            json = Json
-            incomingSerializer = SamplePayload.serializer()
-            outgoingSerializer = SamplePayload.serializer()
+            contentConverter = ContentConverter.Text.Json(
+                json = Json,
+                upstreamSerializer = SamplePayload.serializer(),
+                downstreamSerializer = SamplePayload.serializer()
+            )
         }
 
         crimsonClient.execute(CrimsonCommand.Connect)
